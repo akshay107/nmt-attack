@@ -68,8 +68,8 @@ CMD="python $TF/backup_train.py -i $OUT/data --data processed \
 --layers 6 --multi_heads 8 --gpu $GPUARG --max_decode_len 70 \
 --dev_hyp $OUT/test/valid.out --test_hyp $OUT/test/test.out \
 --model Transformer --metric bleu --wbatchsize 3000 --learning_rate 1.0 \
---src /home/cvpr/akshay/multilingual_nmt-master/temp/run_de_en/test.src.reduced.final \
---pred /home/cvpr/akshay/multilingual_nmt-master/temp/run_de_en/test.out.bpe.reduced.final --out_file output_en.txt --label_smoothing 0"
+--src $TF/temp/run_de_en/test.src.reduced.final \
+--pred $TF/temp/run_de_en/test.out.bpe.reduced.final --out_file output_en.txt --label_smoothing 0"
 
 echo "Training command :: $CMD"
 eval "$CMD"
