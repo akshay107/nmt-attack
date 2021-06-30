@@ -45,9 +45,13 @@ def count_lines(path):
 
 def read_file(path, tok=False):
     n_lines = count_lines(path)
+    print("n_lines:",n_lines)
+    print("path:",path)
     bar = progressbar.ProgressBar()
     with open_file(path) as f:
-        for line in bar(f, max_value=n_lines):
+        #for line in bar(f, max_value=n_lines):
+        lines = f.readlines()
+        for line in lines:
             words = split_sentence(line, tok)
             yield words
 

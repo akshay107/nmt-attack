@@ -7,7 +7,7 @@ import json
 import torch
 from tqdm import tqdm
 
-from models import MultiTaskNMT, Transformer
+from models import MultiTaskNMT, Transformer, Shaped, LangShare
 import utils
 from torch.autograd import Variable
 import preprocess
@@ -68,6 +68,7 @@ def main():
 
     if args.gpu >= 0:
         model.cuda(args.gpu)
+    # print(model)
 
     # Translating State Dict
     hyp = TranslateText(model,
@@ -78,18 +79,22 @@ def main():
                         max_decode_len=args.max_decode_len)()
     save_output(hyp, id2w, args.output)
 
-    # Translating using EMA State Dict
-    model.load_state_dict(checkpoint['state_dict_ema'])
-    if args.gpu >= 0:
-        model.cuda(args.gpu)
+    try:
+        # Translating using EMA State Dict
+        model.load_state_dict(checkpoint['state_dict_ema'])
+        if args.gpu >= 0:
+            model.cuda(args.gpu)
+        # print(model)
 
-    hyp = TranslateText(model,
-                        source_data,
-                        batch=args.batchsize // 4,
-                        beam_size=args.beam_size,
-                        alpha=args.alpha,
-                        max_decode_len=args.max_decode_len)()
-    save_output(hyp, id2w, args.output + '.ema')
+        hyp = TranslateText(model,
+                            source_data,
+                            batch=args.batchsize // 4,
+                            beam_size=args.beam_size,
+                            alpha=args.alpha,
+                            max_decode_len=args.max_decode_len)()
+        save_output(hyp, id2w, args.output + '.ema')
+    except:
+        pass
 
 
 if __name__ == '__main__':
