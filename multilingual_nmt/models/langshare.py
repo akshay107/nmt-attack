@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from models import Transformer
+from models import TransformerLangShare
 import utils
 
 
@@ -31,13 +31,13 @@ def index_select_translate(lang_id, input_):
     return index, input_
 
 
-class MultiTaskNMT(nn.Module):
+class LangShare(nn.Module):
     def __init__(self, config):
-        super(MultiTaskNMT, self).__init__()
+        super(LangShare, self).__init__()
         self.config = config
 
-        self.model1 = Transformer(config)
-        self.model2 = Transformer(config)
+        self.model1 = TransformerLangShare(config)
+        self.model2 = TransformerLangShare(config)
 
         # Identify the language flags for training the model
         self.lang1 = find_key_from_val(config.id2w, config.lang1)
@@ -56,58 +56,26 @@ class MultiTaskNMT(nn.Module):
         # Query Linear Layer Weight sharing in transformer encoder
         for i in range(config.layers):
             if config.pshare_decoder_param:
-                # pass
                 # Share Encoder Layer
                 # self.model1.encoder.layers[i] = self.model2.encoder.layers[i]
 
-                # Share Decoder Params
-                # Share Query
-                if 'q' in config.share_sublayer:
-                    if "self" in config.attn_share:
-                        self.model1.decoder.layers[i].self_attention.W_Q.weight = \
-                        self.model2.decoder.layers[i].self_attention.W_Q.weight
-                    if "source" in config.attn_share:
-                        self.model1.decoder.layers[i].source_attention.W_Q.weight = \
-                        self.model2.decoder.layers[i].source_attention.W_Q.weight
-
-                # Share Key
-                if 'k' in config.share_sublayer:
-                    if "self" in config.attn_share:
-                        self.model1.decoder.layers[i].self_attention.W_K.weight = \
-                        self.model2.decoder.layers[i].self_attention.W_K.weight
-                    if "source" in config.attn_share:
-                        self.model1.decoder.layers[i].source_attention.W_K.weight = \
-                        self.model2.decoder.layers[i].source_attention.W_K.weight
-
-                # Share Value
-                if 'v' in config.share_sublayer:
-                    if "self" in config.attn_share:
-                        self.model1.decoder.layers[i].self_attention.W_V.weight = \
-                        self.model2.decoder.layers[i].self_attention.W_V.weight
-                    if "source" in config.attn_share:
-                        self.model1.decoder.layers[i].source_attention.W_V.weight = \
-                        self.model2.decoder.layers[i].source_attention.W_V.weight
-
-                # Share last Finishing Linear Layer
-                if 'f' in config.share_sublayer:
-                    if "self" in config.attn_share:
-                        self.model1.decoder.layers[i].self_attention.finishing_linear_layer.weight = \
-                        self.model2.decoder.layers[i].self_attention.finishing_linear_layer.weight
-                    if "source" in config.attn_share:
-                        self.model1.decoder.layers[i].source_attention.finishing_linear_layer.weight = \
-                        self.model2.decoder.layers[i].source_attention.finishing_linear_layer.weight
+                # Share Self-Attention
+                self.model1.decoder.layers[i].ln_1 = \
+                    self.model2.decoder.layers[i].ln_1
+                self.model1.decoder.layers[i].self_attention = \
+                    self.model2.decoder.layers[i].self_attention
 
                 # Share LayerNorm
-                self.model1.decoder.layers[i].ln_1 = self.model2.decoder.layers[i].ln_1
-                self.model1.decoder.layers[i].ln_2 = self.model2.decoder.layers[i].ln_2
+                self.model1.decoder.layers[i].ln_2 = \
+                    self.model2.decoder.layers[i].ln_2
+                self.model1.decoder.layers[i].source_attention = \
+                    self.model2.decoder.layers[i].source_attention
 
-                # Share the linear layers
-                if 'linear' in config.share_sublayer:
-                    self.model1.decoder.layers[i].feed_forward = \
-                        self.model2.decoder.layers[i].feed_forward
-                    self.model1.decoder.layers[i].ln_3 = \
-                        self.model2.decoder.layers[i].ln_3
-
+                # Share the Linear Layers
+                self.model1.decoder.layers[i].ln_3 = \
+                    self.model2.decoder.layers[i].ln_3
+                self.model1.decoder.layers[i].feed_forward = \
+                    self.model2.decoder.layers[i].feed_forward
 
     def forward(self, *args):
         # Identify the row indexes corresponding to lang1 and lang2

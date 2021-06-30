@@ -59,7 +59,8 @@ class ScaledEmbedding(nn.Embedding):
 
         self.weight.data = truncated_normal(shape=(self.num_embeddings,
                                                    self.embedding_dim),
-                                            stddev=1.0 / math.sqrt(self.embedding_dim))
+                                            stddev=1.0 / math.sqrt(
+                                                self.embedding_dim))
         if self.padding_idx is not None:
             self.weight.data[self.padding_idx].fill_(0)
 
@@ -294,8 +295,8 @@ class DecoderLayer(nn.Module):
         self.dropout1 = nn.Dropout(layer_prepostprocess_dropout)
 
         if pos_attention:
-            pos_enc_block = Transformer.initialize_position_encoding(500,
-                                                                     n_units)
+            pos_enc_block = TransformerShaped.initialize_position_encoding(500,
+                                                                           n_units)
             self.pos_enc_block = nn.Parameter(torch.FloatTensor(pos_enc_block),
                                               requires_grad=False)
             self.register_parameter("Position Encoding Block",
@@ -401,9 +402,10 @@ class Decoder(nn.Module):
         return e
 
 
-class Transformer(nn.Module):
+class TransformerShaped(nn.Module):
     def __init__(self, config):
-        super(Transformer, self).__init__()
+        self.config = config
+        super(TransformerShaped, self).__init__()
         self.scale_emb = config.n_units ** 0.5
         self.padding_idx = 0
         self.embed_word = ScaledEmbedding(config.n_vocab,
@@ -477,10 +479,14 @@ class Transformer(nn.Module):
         channels = emb_dim
         position = np.arange(length, dtype='f')
         num_timescales = channels // 2
-        log_timescale_increment = (np.log(10000. / 1.) / (float(num_timescales) - 1))
-        inv_timescales = 1. * np.exp(np.arange(num_timescales).astype('f') * -log_timescale_increment)
-        scaled_time = np.expand_dims(position, 1) * np.expand_dims(inv_timescales, 0)
-        signal = np.concatenate([np.sin(scaled_time), np.cos(scaled_time)], axis=1)
+        log_timescale_increment = (
+                np.log(10000. / 1.) / (float(num_timescales) - 1))
+        inv_timescales = 1. * np.exp(
+            np.arange(num_timescales).astype('f') * -log_timescale_increment)
+        scaled_time = np.expand_dims(position, 1) * np.expand_dims(
+            inv_timescales, 0)
+        signal = np.concatenate([np.sin(scaled_time), np.cos(scaled_time)],
+                                axis=1)
         signal = np.reshape(signal, [1, length, channels])
         return signal
 
@@ -491,8 +497,10 @@ class Transformer(nn.Module):
 
         if hasattr(self, 'embed_pos'):
             emb_block += sentence_block_embed(self.embed_pos,
-                                              np.broadcast_to(np.arange(length).astype('i')[None, :],
-                                                              block.shape))
+                                              np.broadcast_to(
+                                                  np.arange(length).astype('i')[
+                                                  None, :],
+                                                  block.shape))
         emb_block = self.embed_dropout(emb_block)
         return emb_block
 
@@ -509,8 +517,9 @@ class Transformer(nn.Module):
         history_mask = np.broadcast_to(history_mask,
                                        (batch, length, length))
         history_mask = history_mask.astype(np.int32)
-        history_mask = Variable(torch.ByteTensor(history_mask).type(utils.BYTE_TYPE),
-                                requires_grad=False)
+        history_mask = Variable(
+            torch.ByteTensor(history_mask).type(utils.BYTE_TYPE),
+            requires_grad=False)
         return history_mask
 
     def tied_linear(self, h):
@@ -555,13 +564,11 @@ class Transformer(nn.Module):
         batch, x_length = x_block.shape
         batch, y_length = y_in_block.shape
 
-
         if z_blocks is None:
             ex_block = self.make_input_embedding(self.embed_word,
                                                  x_block)
             xx_mask = self.make_attention_mask(x_block,
                                                x_block)
-
             xpad_obj = None
             if self.use_pad_remover:
                 xpad_obj = PadRemover(x_block >= preprocess.Vocab_Pad.PAD)
@@ -569,6 +576,11 @@ class Transformer(nn.Module):
             z_blocks = self.encoder(ex_block,
                                     xx_mask,
                                     xpad_obj)
+            if self.config.pshare_encoder_param:
+                z_shared = self.shared_encoder(ex_block,
+                                               xx_mask,
+                                               xpad_obj)
+                z_blocks = z_blocks + z_shared
             # (batch, n_units, x_length)
 
         ey_block = self.make_input_embedding(self.embed_word,
@@ -591,6 +603,16 @@ class Transformer(nn.Module):
                                xy_mask,
                                yy_mask,
                                ypad_obj)
+        if self.config.pshare_decoder_param:
+            h_shared = self.shared_decoder(ey_block,
+                                           z_blocks,
+                                           xy_mask,
+                                           yy_mask,
+                                           ypad_obj)
+            # h_block = h_block + h_shared
+            h_block = self.shared_ln(self.shared_linear(torch.cat([h_block,
+                                                                   h_shared],
+                                                                  dim=-1)))
         # (batch, n_units, y_length)
 
         if get_prediction:
