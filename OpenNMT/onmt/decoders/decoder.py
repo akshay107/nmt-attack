@@ -151,8 +151,7 @@ class RNNDecoderBase(DecoderBase):
             opt.coverage_attn,
             opt.context_gate,
             opt.copy_attn,
-            opt.dropout[0] if type(opt.dropout) is list
-            else opt.dropout,
+            opt.dropout,
             embeddings,
             opt.reuse_copy_attn,
             opt.copy_attn_type)
@@ -190,8 +189,7 @@ class RNNDecoderBase(DecoderBase):
         self.state["hidden"] = tuple(h.detach() for h in self.state["hidden"])
         self.state["input_feed"] = self.state["input_feed"].detach()
 
-    def forward(self, tgt, memory_bank, memory_lengths=None, step=None,
-                **kwargs):
+    def forward(self, tgt, memory_bank, memory_lengths=None, step=None):
         """
         Args:
             tgt (LongTensor): sequences of padded tokens
@@ -234,10 +232,6 @@ class RNNDecoderBase(DecoderBase):
                 if type(attns[k]) == list:
                     attns[k] = torch.stack(attns[k])
         return dec_outs, attns
-
-    def update_dropout(self, dropout):
-        self.dropout.p = dropout
-        self.embeddings.update_dropout(dropout)
 
 
 class StdRNNDecoder(RNNDecoderBase):
@@ -433,8 +427,3 @@ class InputFeedRNNDecoder(RNNDecoderBase):
     def _input_size(self):
         """Using input feed by concatenating input with attention vectors."""
         return self.embeddings.embedding_size + self.hidden_size
-
-    def update_dropout(self, dropout):
-        self.dropout.p = dropout
-        self.rnn.dropout.p = dropout
-        self.embeddings.update_dropout(dropout)

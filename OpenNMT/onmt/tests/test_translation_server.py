@@ -2,6 +2,7 @@ import unittest
 from onmt.translate.translation_server import ServerModel, TranslationServer
 
 import os
+from six import string_types
 from textwrap import dedent
 
 import torch
@@ -111,23 +112,26 @@ class TestServerModel(unittest.TestCase):
         sm = ServerModel(opt, model_id, model_root=model_root, load=True)
         inp = [{"src": "hello how are you today"},
                {"src": "good morning to you ."}]
-        results, scores, n_best, time, aligns = sm.run(inp)
+        results, scores, n_best, time = sm.run(inp)
         self.assertIsInstance(results, list)
         for sentence_string in results:
-            self.assertIsInstance(sentence_string, str)
+            self.assertIsInstance(sentence_string, string_types)
         self.assertIsInstance(scores, list)
         for elem in scores:
             self.assertIsInstance(elem, float)
-        self.assertIsInstance(aligns, list)
-        for align_list in aligns:
-            for align_string in align_list:
-                if align_string is not None:
-                    self.assertIsInstance(align_string, str)
         self.assertEqual(len(results), len(scores))
-        self.assertEqual(len(scores), len(inp) * n_best)
+        self.assertEqual(len(scores), len(inp))
+        self.assertEqual(n_best, 1)
         self.assertEqual(len(time), 1)
         self.assertIsInstance(time, dict)
         self.assertIn("translation", time)
+
+    def test_nbest_init_fails(self):
+        model_id = 0
+        opt = {"models": ["test_model.pt"], "n_best": 2}
+        model_root = TEST_DIR
+        with self.assertRaises(ValueError):
+            ServerModel(opt, model_id, model_root=model_root, load=True)
 
 
 class TestTranslationServer(unittest.TestCase):

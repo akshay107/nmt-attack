@@ -9,7 +9,6 @@ import torch
 import torch.nn as nn
 
 from onmt.encoders.encoder import EncoderBase
-from onmt.decoders.decoder import DecoderBase
 from onmt.models import NMTModel
 import onmt.model_builder
 
@@ -43,16 +42,13 @@ class EnsembleEncoder(EncoderBase):
         return enc_hidden, memory_bank, lengths
 
 
-class EnsembleDecoder(DecoderBase):
+class EnsembleDecoder(nn.Module):
     """Dummy Decoder that delegates to individual real Decoders."""
     def __init__(self, model_decoders):
-        model_decoders = nn.ModuleList(model_decoders)
-        attentional = any([dec.attentional for dec in model_decoders])
-        super(EnsembleDecoder, self).__init__(attentional)
-        self.model_decoders = model_decoders
+        super(EnsembleDecoder, self).__init__()
+        self.model_decoders = nn.ModuleList(model_decoders)
 
-    def forward(self, tgt, memory_bank, memory_lengths=None, step=None,
-                **kwargs):
+    def forward(self, tgt, memory_bank, memory_lengths=None, step=None):
         """See :func:`onmt.decoders.decoder.DecoderBase.forward()`."""
         # Memory_lengths is a single tensor shared between all models.
         # This assumption will not hold if Translator is modified
@@ -61,7 +57,7 @@ class EnsembleDecoder(DecoderBase):
         dec_outs, attns = zip(*[
             model_decoder(
                 tgt, memory_bank[i],
-                memory_lengths=memory_lengths, step=step, **kwargs)
+                memory_lengths=memory_lengths, step=step)
             for i, model_decoder in enumerate(self.model_decoders)])
         mean_attns = self.combine_attns(attns)
         return EnsembleDecoderOutput(dec_outs), mean_attns
@@ -69,8 +65,7 @@ class EnsembleDecoder(DecoderBase):
     def combine_attns(self, attns):
         result = {}
         for key in attns[0].keys():
-            result[key] = torch.stack(
-                [attn[key] for attn in attns if attn[key] is not None]).mean(0)
+            result[key] = torch.stack([attn[key] for attn in attns]).mean(0)
         return result
 
     def init_state(self, src, memory_bank, enc_hidden):
